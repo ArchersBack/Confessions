@@ -1,5 +1,11 @@
 Named theinfo.md because if it was README.md github gists has a bug that changes the title name of the gist to README.md
 
+praw and openpyxl must be installed. OAuth2Util is optional. In a terminal with root access:
+
+    pip3 install openpyxl
+    pip3 install praw
+    pip3 install praw-OAuth2Util
+
 Recommended usage is as follows:
 
 Place the Microsoft Office(`xlsx`) (not Microsoft Office Legacy(`xls`), those don't work as well or may not at all, don't know) and this script in the same folder. If you have an OAuth2Util oauth.ini, put that in here to. The script will attempt to use OAuth if it can, else it will default to the username ad password arguments, if possible, else raise an error.
