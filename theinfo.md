@@ -22,3 +22,5 @@ Note: Like above, you may need to replace `python3` with `py -3`
 `**kw` are any of the other params as mentioned by the docstring in modapplicationposter.py.
 
 Note: If you get some weird language when you get an error, it's because I was drunk when I first wrote this, and when I continued and was sober, I found it funny and kept it in.
+
+Also: READ THE DOCSTRING
