@@ -23,7 +23,6 @@ def run(workbookname, usernamecolletter=None, subreddit=None, notifyme=False, us
         raise TypeError("run() missing required keyword argument subreddit, dipshit")
     import praw
     import openpyxl
-    from openpyxl.cell import get_column_letter as gcl
     useragent = (useragent or 
                  ("Mod application to subreddit "
                   "poster posting to /r/{0} by /u/13steinj".format(subreddit)))
