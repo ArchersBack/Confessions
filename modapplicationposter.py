@@ -1,6 +1,6 @@
 BAD_WORDS = ['shit', 'piss', 'fuck']
 
-def run(workbookname, usernamecolletter=None, subreddit=None, notifyme=False, useragent=None, username=None, password=None):
+def run(workbookname, usernamecolletter=None, subreddit=None, badwords=[], notifyme=False, runbackgroundcheck=True, useragent=None, username=None, password=None):
     """
     Main instance
 
@@ -13,6 +13,9 @@ def run(workbookname, usernamecolletter=None, subreddit=None, notifyme=False, us
     :param notifyme: whether or not to send inbox replies to the account that is making the posts. default is False.
     :param subreddit: the sub to post to (string or praw.objects.Subreddit object). While it is a
     keyword argument, that's only cause technicalities. IT IS REQUIRED.
+    :param badwords: list of badwords for background checks. Default is BAD_WORDS in this file.
+    :param runbackgroundcheck: Boolean, whether or not to add a background check to the post.
+    BACKGROUND CHECKS CAN TAKE SOME TIME. If there is no username found from the spreadsheet, it will be skipped
     :param useragent: optional useragent to specify. The default is
     'Mod application to subreddit poster posting to /r/{subreddit} by /u/13steinj'
     :params username, password: A username and password to specify if you wish to use LoginAuth.
@@ -25,6 +28,7 @@ def run(workbookname, usernamecolletter=None, subreddit=None, notifyme=False, us
         raise TypeError("run() missing required keyword argument subreddit, dipshit")
     import praw
     import openpyxl
+    badwords = badwords or BAD_WORDS
     useragent = (useragent or 
                  ("Mod application to subreddit "
                   "poster posting to /r/{0} by /u/13steinj".format(subreddit)))
@@ -81,29 +85,59 @@ def run(workbookname, usernamecolletter=None, subreddit=None, notifyme=False, us
                 continue
             else:
                 username = cell.value if cell.column == usernamecolletter else None
-        titleinfo = "at {0}".format(row[0].value) if not username else "by {0}".format(username)
-        title = "Moderator Application #{0} {1}".format(rownum, titleinfo)
-        post = r.submit(subreddit, title, text=body, send_replies=notifyme)
-        print("Submitted {0}".format(post.permalink))
+                if username and username.startswith("/u/"):
+                    username = username[3:]
+                elif username and username.startswith("u/"):
+                    username = username[2:]
+        if username and runbackgroundcheck:
+            body += background_check(r, username, badwords=badwords)
+        if len(body) > 40000:
+            bodies = list(_util_bodies(40000, body))
+        else:
+            bodies = [body]
+        titleinfo = "at /u/{0}".format(row[0].value) if not username else "by /u/{0}".format(username)
+        maintitle = "Moderator Application #{0} {1}".format(rownum, titleinfo)
+        for body in bodies:
+            if bodies.index(body) > 0:
+                title = "{0} Part {1}".format(maintitle, (bodies.index(body) + 1))
+            else:
+                title = maintitle
+            post = r.submit(subreddit, title, text=body, send_replies=notifyme)
+            print("Submitted {0}".format(post.permalink))
     print("I've just posted {0} applications, dipshit. I'm done now. Call me when you want me again. But you could at least ask me out to dinner first, you rascal!".format(rownum))
     return rownum, subreddit
     
-def background_check(reddit_session, username, post_sub=None, badwords=[]):
+def background_check(reddit_session, username, badwords=[], post_sub=None):
+    """Run a background check on a username
+
+    :param reddit_session: a reddit session via praw, usually r
+    :param username: username to check
+    :param badwords: list of badwords to run in the profanitychecker
+    :param post_sub: if you want to post this check to a sub, this
+    should be the sub name or the subreddit object of this sub name
+    :returns: post if post_sub is defined, else a background check string.
+    """
     from praw.errors import NotFound, Forbidden
     import datetime
     cannot_submit = reddit_session.user == None and not reddit_session.is_oauth_session()
     if cannot_submit and post_sub != None:
         raise ValueError("Can't post without being logged in, dipshit")
     title = "Background Check: {0}".format(username) if post_sub else None
-    body = "Background Check:\n\n" if not title else ""
+    if username.lower().startswith('/u/'):
+        username = username[3:]
+    elif username.lower().startswith('u/'):
+        username = username[2:]
+    body = "#Background Check:\n\n" if not title else "/u/{0}:\n\n".format(username)
+    if title:
+        print("Running background check on /u/{0}".format(username))
     user = reddit_session.get_redditor(username)
     try:
         dumblist = list(user.get_overview())
     except NotFound:
-        body += "Account doesn't exist"
+        body += "Account doesn't exist or deleted or shadowbanned"
         return body
     except Forbidden:
-        body += "Account deleted or shadowbanned or permanently suspended"
+        body += "Account permanently suspended"
         return body
     ucreated = datetime.datetime.fromtimestamp(user.created_utc)
     utimeago = "Account made {0} ago".format(str(datetime.datetime.now() - ucreated))
@@ -114,7 +148,7 @@ def background_check(reddit_session, username, post_sub=None, badwords=[]):
     try:
         timepost = posts[100]
         timepostnum = 100
-        timepostord = ordinal(timepostnum)
+        timepostord = _util_ordinal(timepostnum)
         timepostpre = timepostord + " post"
         timepostdate = datetime.datetime.fromtimestamp(timepost.created_utc)
         timeago = "made {0} ago".format(str(datetime.datetime.now() - timepostdate))
@@ -124,7 +158,7 @@ def background_check(reddit_session, username, post_sub=None, badwords=[]):
         try:
             timepost = posts[-1]
             timepostnum = (posts.index(timepost) + 1)
-            timepostord = ordinal(timepostnum)
+            timepostord = _util_ordinal(timepostnum)
             timepostpre = "last({0}) post".format(timepostord)
             timepostdate = datetime.datetime.fromtimestamp(timepost.created_utc)
             timeago = "made {0} ago".format(str(datetime.datetime.now() - timepostdate))
@@ -135,15 +169,29 @@ def background_check(reddit_session, username, post_sub=None, badwords=[]):
     body += timeposttext + "\n\n"
     comments = list(user.get_comments(limit=None))
     totalprofanities, specificprofanities = profanitycheck(badwords, posts, comments)
-    table = "Profanity | Times Used\n---|---"
+    profanitytable = "Profanity | Times Used\n---|---"
     for word in specificprofanities:
-        table += "\n"
-        table += "{0} | {1}".format(word, specificprofanities[word])
+        profanitytable += "\n"
+        profanitytable += "{0} | {1}".format(word, specificprofanities[word])
+    profanitytable += "\n**Total** | {0}".format(totalprofanities)
     if specificprofanities:
-        body += "Profanities used in the last 1000 posts and comments"
-        body += table
+        body += "Profanities used in the last 1000 posts and comments:\n\n"
+        body += profanitytable + "\n\n"
+    totalsubs, subhistory = historycheck(posts, comments)
+    orderedsubs = sorted(subhistory.keys(), key=str.lower)
+    historytable = "Subreddit | Times Used\n---|---"
+    for subreddit in orderedsubs:
+        historytable += '\n'
+        historytable += "/r/{0} | {1}".format(subreddit, subhistory[subreddit])
+    historytable += "\n**Total** | {0}".format(totalsubs)
+    body += "Subreddit history over last 1000 posts and comments:\n\n"
+    body += historytable + "\n\n"
+    if title:
+        post = reddit_session.submit(post_sub, title, text=body)
+        return post
+    return body
 
-def ordinal(value):
+def _util_ordinal(value):
     """
     Converts zero or a *postive* integer (or their string 
     representations) to an ordinal value.
@@ -170,11 +218,17 @@ def ordinal(value):
 
     return ordval
 
+def _util_bodies(num, string):
+    """Produce `num`-character chunks from `string`."""
+    for start in range(0, len(string), num):
+        yield string[start:start+num]
+
 def profanitycheck(badwords, *args):
     """
     Profanity Checker
-    :param badwords: list of badwords
-    :param args: comma delimited list of lists of posts or comments
+    :param badwords: list of badwords. Recommended to not contain endings i.e "ing",
+    "ed" for best results, as containing those may make for duplicates.
+    :param args: comma delimited list of iters of posts or comments
     :returns: dict of word: usagecount for each word in badwords
     """
     import re
@@ -200,3 +254,20 @@ def profanitycheck(badwords, *args):
         profanity_usage[word] = badwordusage
         badwordtotalusage += badwordusage
     return badwordtotalusage, profanity_usage
+
+def historycheck(*args):
+    """
+    Subreddit History Checker
+    :param args: comma delimited list of iters of posts or comments
+    """
+    obj_list = []
+    subreddit_history = {}
+    for l in args:
+        obj_list += l
+    for Thing in obj_list:
+        subtotal = subreddit_history.get(Thing.subreddit.display_name, 0)
+        subreddit_history.update({Thing.subreddit.display_name: (subtotal+1)})
+    totalsubs = 0
+    for num in subreddit_history.values():
+        totalsubs += num
+    return totalsubs, subreddit_history
