@@ -127,7 +127,7 @@ def background_check(reddit_session, username, badwords=[], post_sub=None):
         username = username[3:]
     elif username.lower().startswith('u/'):
         username = username[2:]
-    body = "#Background Check:\n\n" if not title else "/u/{0}:\n\n".format(username)
+    body = "#Background Check -- /u/{0}:\n\n".format(username) if not title else "/u/{0}:\n\n".format(username)
     if title:
         print("Running background check on /u/{0}".format(username))
     user = reddit_session.get_redditor(username)
