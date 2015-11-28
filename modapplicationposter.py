@@ -169,8 +169,9 @@ def background_check(reddit_session, username, badwords=[], post_sub=None):
     body += timeposttext + "\n\n"
     comments = list(user.get_comments(limit=None))
     totalprofanities, specificprofanities = profanitycheck(badwords, posts, comments)
+    orderedprofanities = sorted(specificprofanities.keys(), key=str.lower)
     profanitytable = "Profanity | Times Used\n---|---"
-    for word in specificprofanities:
+    for word in orderedprofanities:
         profanitytable += "\n"
         profanitytable += "{0} | {1}".format(word, specificprofanities[word])
     profanitytable += "\n**Total** | {0}".format(totalprofanities)
@@ -249,7 +250,7 @@ def profanitycheck(badwords, *args):
     for word in badwords:
         badwordusage = 0
         for check in check_list:
-            if re.search(word, check):
+            if re.search(word.lower(), check.lower()):
                 badwordusage +=1
         profanity_usage[word] = badwordusage
         badwordtotalusage += badwordusage
