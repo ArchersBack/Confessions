@@ -252,7 +252,8 @@ def profanitycheck(badwords, *args):
         for check in check_list:
             if re.search(word.lower(), check.lower()):
                 badwordusage +=1
-        profanity_usage[word] = badwordusage
+        if badwordusage:
+            profanity_usage[word] = badwordusage
         badwordtotalusage += badwordusage
     return badwordtotalusage, profanity_usage
 
